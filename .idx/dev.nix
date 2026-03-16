@@ -17,16 +17,14 @@
   services.docker.enable = true;
 
   idx.workspace.onStart = {
-
     novnc = ''
       set -e
 
-      echo "Starting Ubuntu noVNC VPS..."
+      echo "Starting Ubuntu noVNC..."
 
       mkdir -p ~/vps
       cd ~/vps
 
-      # Start container
       if ! docker ps -a --format '{{.Names}}' | grep -q ubuntu-novnc; then
 
         docker pull thuonghai2711/ubuntu-novnc-pulseaudio:22.04
@@ -48,23 +46,32 @@
       fi
 
 
-      echo "Waiting for VNC..."
+      echo "Waiting VNC..."
 
       until nc -z localhost 10000; do
         sleep 1
       done
 
 
-      echo "Installing Chrome..."
+      echo "Installing Chrome + VSCode..."
 
-      docker exec ubuntu-novnc bash -c "
+      docker exec -u root ubuntu-novnc bash -c "
 
-        apt update
-        apt remove -y firefox || true
+      apt-get update
 
-        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O chrome.deb
-        apt install -y ./chrome.deb
-        rm chrome.deb
+      apt-get install -y wget gpg
+
+      # Chrome
+      wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb
+      apt-get install -y /tmp/chrome.deb
+
+      # VS Code
+      wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/ms.gpg
+      echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/ms.gpg] https://packages.microsoft.com/repos/vscode stable main' > /etc/apt/sources.list.d/vscode.list
+      apt-get update
+      apt-get install -y code
+
+      rm -f /tmp/chrome.deb
       "
 
 
@@ -73,41 +80,37 @@
       pkill cloudflared || true
 
       nohup cloudflared tunnel --no-autoupdate --url http://localhost:10000 \
-      > cloudflared.log 2>&1 &
+      > tunnel.log 2>&1 &
 
 
-      echo "Getting tunnel URL..."
+      echo "Getting link..."
 
       URL=""
 
       for i in {1..30}; do
 
-        URL=$(grep -oE 'https://[-a-z0-9]*\.trycloudflare\.com' cloudflared.log | head -n1)
+        URL=$(grep -oE 'https://[-a-z0-9]*\.trycloudflare\.com' tunnel.log | head -n1)
 
         if [ -n "$URL" ]; then
           break
         fi
 
         sleep 2
-
       done
 
 
       echo ""
-      echo "======================================"
-      echo " Ubuntu Web Desktop Ready "
+      echo "================================="
+      echo " VPS READY "
       echo ""
-      echo " Link: $URL"
-      echo " Password: 12345678"
-      echo "======================================"
-
-      echo "VPS running..."
+      echo " LINK: $URL"
+      echo " PASSWORD: 12345678"
+      echo "================================="
 
       while true; do
         sleep 60
       done
     '';
-
   };
 
 
@@ -115,7 +118,6 @@
     enable = true;
 
     previews = {
-
       novnc = {
         manager = "web";
 
@@ -124,11 +126,8 @@
           "-lc"
           "socat TCP-LISTEN:$PORT,fork,reuseaddr TCP:127.0.0.1:10000"
         ];
-
       };
-
     };
-
   };
 
 }
