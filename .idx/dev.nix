@@ -9,34 +9,24 @@
     coreutils
     gnugrep
     sudo
-    apt
-    systemd
-    unzip
-    netcat
     wget
+    netcat
+    unzip
   ];
 
   services.docker.enable = true;
 
   idx.workspace.onStart = {
+
     novnc = ''
       set -e
 
-      echo "Starting VPS setup..."
+      echo "Starting Ubuntu noVNC VPS..."
 
       mkdir -p ~/vps
       cd ~/vps
 
-      # Cleanup (run once)
-      if [ ! -f ~/.cleanup_done ]; then
-        echo "Cleaning workspace..."
-        rm -rf ~/.gradle/* ~/.emu/* || true
-        find ~ -mindepth 1 -maxdepth 1 ! -name 'idx-ubuntu22-gui' ! -name '.*' -exec rm -rf {} +
-        touch ~/.cleanup_done
-      fi
-
-      echo "Checking Docker container..."
-
+      # Start container
       if ! docker ps -a --format '{{.Names}}' | grep -q ubuntu-novnc; then
 
         docker pull thuonghai2711/ubuntu-novnc-pulseaudio:22.04
@@ -48,8 +38,8 @@
           -p 10000:10000 \
           -e VNC_PASSWD=12345678 \
           -e PORT=10000 \
-          -e SCREEN_WIDTH=1024 \
-          -e SCREEN_HEIGHT=768 \
+          -e SCREEN_WIDTH=1280 \
+          -e SCREEN_HEIGHT=800 \
           -e SCREEN_DEPTH=24 \
           thuonghai2711/ubuntu-novnc-pulseaudio:22.04
 
@@ -58,60 +48,66 @@
       fi
 
 
-      echo "Waiting for VNC Web..."
+      echo "Waiting for VNC..."
 
       until nc -z localhost 10000; do
         sleep 1
       done
 
-      echo "Installing Chrome inside container..."
 
-      docker exec ubuntu-novnc bash -lc "
+      echo "Installing Chrome..."
 
-        sudo apt update
-        sudo apt remove -y firefox || true
+      docker exec ubuntu-novnc bash -c "
 
-        wget -O /tmp/chrome.deb \
-        https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        apt update
+        apt remove -y firefox || true
 
-        sudo apt install -y /tmp/chrome.deb
-        rm -f /tmp/chrome.deb
+        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O chrome.deb
+        apt install -y ./chrome.deb
+        rm chrome.deb
       "
 
 
-      echo "Starting Cloudflare tunnel..."
+      echo "Starting Cloudflare Tunnel..."
 
-      nohup cloudflared tunnel --no-autoupdate \
-        --url http://localhost:10000 \
-        > /tmp/cloudflared.log 2>&1 &
+      pkill cloudflared || true
+
+      nohup cloudflared tunnel --no-autoupdate --url http://localhost:10000 \
+      > cloudflared.log 2>&1 &
 
 
-      echo "Getting public URL..."
+      echo "Getting tunnel URL..."
 
       URL=""
 
-      for i in {1..20}; do
-        URL=$(grep -o 'https://[a-z0-9.-]*trycloudflare.com' /tmp/cloudflared.log | head -n1)
-        [ -n "$URL" ] && break
-        sleep 1
+      for i in {1..30}; do
+
+        URL=$(grep -oE 'https://[-a-z0-9]*\.trycloudflare\.com' cloudflared.log | head -n1)
+
+        if [ -n "$URL" ]; then
+          break
+        fi
+
+        sleep 2
+
       done
 
 
       echo ""
-      echo "========================================="
-      echo "   VPS Web Desktop Ready"
+      echo "======================================"
+      echo " Ubuntu Web Desktop Ready "
       echo ""
-      echo "   Link: $URL"
-      echo "   Password: 12345678"
-      echo "========================================="
+      echo " Link: $URL"
+      echo " Password: 12345678"
+      echo "======================================"
 
-
-      echo "Keeping workspace alive..."
+      echo "VPS running..."
 
       while true; do
         sleep 60
       done
     '';
+
   };
 
 
@@ -119,6 +115,7 @@
     enable = true;
 
     previews = {
+
       novnc = {
         manager = "web";
 
@@ -127,8 +124,11 @@
           "-lc"
           "socat TCP-LISTEN:$PORT,fork,reuseaddr TCP:127.0.0.1:10000"
         ];
+
       };
+
     };
+
   };
 
 }
