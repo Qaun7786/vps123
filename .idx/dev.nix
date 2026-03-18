@@ -21,53 +21,52 @@
     arch = ''
       set -e
 
-      echo "🚀 Starting Arch noVNC..."
+      echo "🚀 Starting Arch noVNC (FINAL BUILD)..."
 
       mkdir -p ~/vps
       cd ~/vps
 
-      if ! docker ps -a --format '{{.Names}}' | grep -q arch-novnc; then
+      docker rm -f arch-novnc 2>/dev/null || true
 
-        echo "📦 Pull Arch..."
-        docker pull archlinux:latest
+      docker run -d \
+        --name arch-novnc \
+        --shm-size=1g \
+        -p 10000:10000 \
+        archlinux:latest \
+        bash -c "
 
-        echo "📦 Create container..."
+        echo '📦 Update...'
+        pacman -Syu --noconfirm
 
-        docker run -d \
-          --name arch-novnc \
-          --shm-size=1g \
-          -p 10000:10000 \
-          archlinux:latest \
-          bash -c "
+        echo '📦 Install base...'
+        pacman -S --noconfirm xfce4 xfce4-goodies tigervnc xterm git python dbus
 
-          pacman -Syu --noconfirm &&
-          pacman -S --noconfirm xfce4 xfce4-goodies tigervnc xterm git python &&
+        echo '📥 Install noVNC...'
+        git clone https://github.com/novnc/noVNC.git /opt/novnc
+        git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
 
-          echo '📥 Installing noVNC...'
-          git clone https://github.com/novnc/noVNC.git /opt/novnc &&
-          git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify &&
+        echo '🔧 Setup VNC...'
+        mkdir -p ~/.vnc
+        echo '12345678' | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
 
-          mkdir -p ~/.vnc &&
-          echo '12345678' | vncpasswd -f > ~/.vnc/passwd &&
-          chmod 600 ~/.vnc/passwd &&
+        echo '#!/bin/bash
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+mkdir -p \$XDG_RUNTIME_DIR
+dbus-daemon --system &
+dbus-launch startxfce4 &' > ~/.vnc/xstartup
 
-          echo '#!/bin/bash
-startxfce4 &' > ~/.vnc/xstartup &&
-          chmod +x ~/.vnc/xstartup &&
+        chmod +x ~/.vnc/xstartup
 
-          echo '🖥️ Starting VNC...'
-          vncserver :1 &&
+        echo '🖥️ Start VNC...'
+        vncserver :1
 
-          echo '🌐 Starting noVNC...'
-          /opt/novnc/utils/websockify/run 10000 localhost:5901 --web /opt/novnc
-          "
-
-      else
-        docker start arch-novnc || true
-      fi
+        echo '🌐 Start noVNC...'
+        /opt/novnc/utils/websockify/run 10000 localhost:5901 --web /opt/novnc
+        "
 
 
-      echo "⏳ Waiting noVNC..."
+      echo "⏳ Waiting noVNC ready..."
 
       for i in {1..60}; do
         if nc -z localhost 10000; then
@@ -101,7 +100,7 @@ startxfce4 &' > ~/.vnc/xstartup &&
 
       echo ""
       echo "================================="
-      echo " ARCH VPS READY "
+      echo " ARCH DESKTOP READY 😎"
       echo ""
       echo " LINK: $URL"
       echo " PASSWORD: 12345678"
