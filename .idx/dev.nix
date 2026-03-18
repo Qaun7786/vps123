@@ -59,10 +59,14 @@ startxfce4 &' > ~/.vnc/xstartup &&
       fi
 
 
-      echo "⏳ Waiting VNC..."
+      echo "⏳ Waiting noVNC ready..."
 
-      until nc -z localhost 10000; do
-        sleep 1
+      for i in {1..60}; do
+        if nc -z localhost 10000; then
+          echo "✅ noVNC ready!"
+          break
+        fi
+        sleep 2
       done
 
 
