@@ -17,65 +17,56 @@
   services.docker.enable = true;
 
   idx.workspace.onStart = {
-    novnc = ''
+    arch = ''
       set -e
 
-      echo "Starting Ubuntu noVNC..."
+      echo "🚀 Starting Arch noVNC..."
 
       mkdir -p ~/vps
       cd ~/vps
 
-      if ! docker ps -a --format '{{.Names}}' | grep -q ubuntu-novnc; then
+      if ! docker ps -a --format '{{.Names}}' | grep -q arch-novnc; then
 
-        docker pull thuonghai2711/ubuntu-novnc-pulseaudio:22.04
+        echo "📦 Pulling Arch image..."
+        docker pull archlinux:latest
+
+        echo "📦 Creating Arch container..."
 
         docker run -d \
-          --name ubuntu-novnc \
+          --name arch-novnc \
           --shm-size=1g \
-          --cap-add=SYS_ADMIN \
           -p 10000:10000 \
-          -e VNC_PASSWD=12345678 \
-          -e PORT=10000 \
-          -e SCREEN_WIDTH=1280 \
-          -e SCREEN_HEIGHT=800 \
-          -e SCREEN_DEPTH=24 \
-          thuonghai2711/ubuntu-novnc-pulseaudio:22.04
+          archlinux:latest \
+          bash -c "
+
+          pacman -Syu --noconfirm &&
+          pacman -S xfce4 xfce4-goodies tigervnc novnc websockify xterm --noconfirm &&
+
+          mkdir -p ~/.vnc &&
+          echo '12345678' | vncpasswd -f > ~/.vnc/passwd &&
+          chmod 600 ~/.vnc/passwd &&
+
+          echo '#!/bin/bash
+startxfce4 &' > ~/.vnc/xstartup &&
+          chmod +x ~/.vnc/xstartup &&
+
+          vncserver :1 &&
+          websockify --web=/usr/share/novnc/ 10000 localhost:5901
+          "
 
       else
-        docker start ubuntu-novnc || true
+        docker start arch-novnc || true
       fi
 
 
-      echo "Waiting VNC..."
+      echo "⏳ Waiting VNC..."
 
       until nc -z localhost 10000; do
         sleep 1
       done
 
 
-      echo "Installing Chrome + VSCode..."
-
-      docker exec -u root ubuntu-novnc bash -c "
-
-      apt-get update
-
-      apt-get install -y wget gpg
-
-      # Chrome
-      wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb
-      apt-get install -y /tmp/chrome.deb
-
-      # VS Code
-      wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/ms.gpg
-      echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/ms.gpg] https://packages.microsoft.com/repos/vscode stable main' > /etc/apt/sources.list.d/vscode.list
-      apt-get update
-      apt-get install -y code
-
-      rm -f /tmp/chrome.deb
-      "
-
-
-      echo "Starting Cloudflare Tunnel..."
+      echo "☁️ Starting Cloudflare Tunnel..."
 
       pkill cloudflared || true
 
@@ -83,7 +74,7 @@
       > tunnel.log 2>&1 &
 
 
-      echo "Getting link..."
+      echo "🔎 Getting link..."
 
       URL=""
 
@@ -101,7 +92,7 @@
 
       echo ""
       echo "================================="
-      echo " VPS READY "
+      echo " ARCH VPS READY "
       echo ""
       echo " LINK: $URL"
       echo " PASSWORD: 12345678"
