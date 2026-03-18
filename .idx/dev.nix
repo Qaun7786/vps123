@@ -12,72 +12,70 @@
     wget
     netcat
     unzip
-    git
   ];
 
   services.docker.enable = true;
 
   idx.workspace.onStart = {
-    arch = ''
+    novnc = ''
       set -e
 
-      echo "🚀 Starting Arch noVNC (FINAL BUILD)..."
+      echo "Starting Ubuntu noVNC..."
 
       mkdir -p ~/vps
       cd ~/vps
 
-      docker rm -f arch-novnc 2>/dev/null || true
+      if ! docker ps -a --format '{{.Names}}' | grep -q ubuntu-novnc; then
 
-      docker run -d \
-        --name arch-novnc \
-        --shm-size=1g \
-        -p 10000:10000 \
-        archlinux:latest \
-        bash -c "
+        docker pull thuonghai2711/ubuntu-novnc-pulseaudio:22.04
 
-        echo '📦 Update...'
-        pacman -Syu --noconfirm
+        docker run -d \
+          --name ubuntu-novnc \
+          --shm-size=1g \
+          --cap-add=SYS_ADMIN \
+          -p 10000:10000 \
+          -e VNC_PASSWD=12345678 \
+          -e PORT=10000 \
+          -e SCREEN_WIDTH=1280 \
+          -e SCREEN_HEIGHT=800 \
+          -e SCREEN_DEPTH=24 \
+          thuonghai2711/ubuntu-novnc-pulseaudio:22.04
 
-        echo '📦 Install base...'
-        pacman -S --noconfirm xfce4 xfce4-goodies tigervnc xterm git python dbus
-
-        echo '📥 Install noVNC...'
-        git clone https://github.com/novnc/noVNC.git /opt/novnc
-        git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify
-
-        echo '🔧 Setup VNC...'
-        mkdir -p ~/.vnc
-        echo '12345678' | vncpasswd -f > ~/.vnc/passwd
-        chmod 600 ~/.vnc/passwd
-
-        echo '#!/bin/bash
-export XDG_RUNTIME_DIR=/tmp/runtime-root
-mkdir -p \$XDG_RUNTIME_DIR
-dbus-daemon --system &
-dbus-launch startxfce4 &' > ~/.vnc/xstartup
-
-        chmod +x ~/.vnc/xstartup
-
-        echo '🖥️ Start VNC...'
-        vncserver :1
-
-        echo '🌐 Start noVNC...'
-        /opt/novnc/utils/websockify/run 10000 localhost:5901 --web /opt/novnc
-        "
+      else
+        docker start ubuntu-novnc || true
+      fi
 
 
-      echo "⏳ Waiting noVNC ready..."
+      echo "Waiting VNC..."
 
-      for i in {1..60}; do
-        if nc -z localhost 10000; then
-          echo "✅ noVNC ready!"
-          break
-        fi
-        sleep 2
+      until nc -z localhost 10000; do
+        sleep 1
       done
 
 
-      echo "☁️ Starting Cloudflare Tunnel..."
+      echo "Installing Chrome + VSCode..."
+
+      docker exec -u root ubuntu-novnc bash -c "
+
+      apt-get update
+
+      apt-get install -y wget gpg
+
+      # Chrome
+      wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb
+      apt-get install -y /tmp/chrome.deb
+
+      # VS Code
+      wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/ms.gpg
+      echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/ms.gpg] https://packages.microsoft.com/repos/vscode stable main' > /etc/apt/sources.list.d/vscode.list
+      apt-get update
+      apt-get install -y code
+
+      rm -f /tmp/chrome.deb
+      "
+
+
+      echo "Starting Cloudflare Tunnel..."
 
       pkill cloudflared || true
 
@@ -85,22 +83,25 @@ dbus-launch startxfce4 &' > ~/.vnc/xstartup
       > tunnel.log 2>&1 &
 
 
-      echo "🔎 Getting link..."
+      echo "Getting link..."
 
       URL=""
 
       for i in {1..30}; do
+
         URL=$(grep -oE 'https://[-a-z0-9]*\.trycloudflare\.com' tunnel.log | head -n1)
+
         if [ -n "$URL" ]; then
           break
         fi
+
         sleep 2
       done
 
 
       echo ""
       echo "================================="
-      echo " ARCH DESKTOP READY 😎"
+      echo " VPS READY "
       echo ""
       echo " LINK: $URL"
       echo " PASSWORD: 12345678"
