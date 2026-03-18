@@ -12,6 +12,7 @@
     wget
     netcat
     unzip
+    git
   ];
 
   services.docker.enable = true;
@@ -27,10 +28,10 @@
 
       if ! docker ps -a --format '{{.Names}}' | grep -q arch-novnc; then
 
-        echo "📦 Pulling Arch image..."
+        echo "📦 Pull Arch..."
         docker pull archlinux:latest
 
-        echo "📦 Creating Arch container..."
+        echo "📦 Create container..."
 
         docker run -d \
           --name arch-novnc \
@@ -40,7 +41,11 @@
           bash -c "
 
           pacman -Syu --noconfirm &&
-          pacman -S xfce4 xfce4-goodies tigervnc novnc websockify xterm --noconfirm &&
+          pacman -S --noconfirm xfce4 xfce4-goodies tigervnc xterm git python &&
+
+          echo '📥 Installing noVNC...'
+          git clone https://github.com/novnc/noVNC.git /opt/novnc &&
+          git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify &&
 
           mkdir -p ~/.vnc &&
           echo '12345678' | vncpasswd -f > ~/.vnc/passwd &&
@@ -50,8 +55,11 @@
 startxfce4 &' > ~/.vnc/xstartup &&
           chmod +x ~/.vnc/xstartup &&
 
+          echo '🖥️ Starting VNC...'
           vncserver :1 &&
-          websockify --web=/usr/share/novnc/ 10000 localhost:5901
+
+          echo '🌐 Starting noVNC...'
+          /opt/novnc/utils/websockify/run 10000 localhost:5901 --web /opt/novnc
           "
 
       else
@@ -59,7 +67,7 @@ startxfce4 &' > ~/.vnc/xstartup &&
       fi
 
 
-      echo "⏳ Waiting noVNC ready..."
+      echo "⏳ Waiting noVNC..."
 
       for i in {1..60}; do
         if nc -z localhost 10000; then
@@ -83,13 +91,10 @@ startxfce4 &' > ~/.vnc/xstartup &&
       URL=""
 
       for i in {1..30}; do
-
         URL=$(grep -oE 'https://[-a-z0-9]*\.trycloudflare\.com' tunnel.log | head -n1)
-
         if [ -n "$URL" ]; then
           break
         fi
-
         sleep 2
       done
 
